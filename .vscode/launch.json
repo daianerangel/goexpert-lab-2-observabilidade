@@ -1,0 +1,25 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Launch App 1",
+            "type": "go",
+            "request": "launch",
+            "mode": "auto",
+            "program": "${workspaceFolder}/service-a/main.go" // Path to the main file of your first app
+        },
+        {
+            "name": "Launch App 2",
+            "type": "go",
+            "request": "launch",
+            "mode": "auto",
+            "program": "${workspaceFolder}/service-b/main.go" // Path to the main file of your second app
+        }
+    ],
+    "compounds": [
+        {
+            "name": "Launch Both Apps",
+            "configurations": ["Launch App 1", "Launch App 2"]
+        }
+    ]
+}
