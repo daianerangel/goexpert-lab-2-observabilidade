@@ -45,7 +45,9 @@ func zipCodeHandler(w http.ResponseWriter, r *http.Request) {
 
 	client := http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
 
-	url := fmt.Sprintf("http://localhost:8081/zipcode?zipcode=%s", req.CEP)
+	url := fmt.Sprintf("http://service-b:8081/zipcode?zipcode=%s", req.CEP)
+	// if you want to test locally with vscode debug, use the following line
+	// url := fmt.Sprintf("http://localhost:8081/zipcode?zipcode=%s", req.CEP)
 	resp, err := client.Get(url)
 
 	if err != nil {

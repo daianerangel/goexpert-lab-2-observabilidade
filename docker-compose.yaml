@@ -37,23 +37,25 @@ services:
       - "4317:4317"   # OTLP gRPC receiver
       - "55679:55679" # zpages extension
       
-  # service-a:
-  #   build: ./service-a/docker
-  #   depends_on:
-  #     - jaeger-all-in-one
-  #     - otel-collector
-  #   volumes:
-  #     - .:/go/src/app
-  #   ports:
-  #     - "8080:8080"
+  service-a:
+    container_name: service-a
+    build: 
+      context: ./service-a
+    depends_on:
+      - jaeger-all-in-one
+      - prometheus
+      - otel-collector
+    ports:
+      - "8080:8080"
 
-  # service-b:
-  #   build: ./service-b/docker
-  #   depends_on:
-  #     - jaeger-all-in-one
-  #     - otel-collector
-  #   volumes:
-  #     - .:/go/src/app
-  #   ports:
-  #     - "8081:8081"
+  service-b:
+    container_name: service-b
+    build: 
+      context: ./service-b
+    depends_on:
+      - jaeger-all-in-one
+      - prometheus
+      - otel-collector
+    ports:
+      - "8081:8081"
     
