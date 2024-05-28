@@ -13,6 +13,7 @@ import (
 	"os/signal"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/spf13/viper"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel"
@@ -22,7 +23,6 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.21.0"
 	"go.opentelemetry.io/otel/trace"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 type TemperatureResponse struct {
@@ -102,9 +102,9 @@ func main() {
 		}
 	}()
 
-	tracer := otel.Tracer("microservice-tracer")
+	tracer := otel.Tracer("service-b")
 
-	h:= &handler{
+	h := &handler{
 		tracer: tracer,
 	}
 
@@ -125,32 +125,29 @@ func main() {
 }
 
 func (h *handler) temperatureHandler(w http.ResponseWriter, r *http.Request) {
-	
+
 	carrier := propagation.HeaderCarrier(r.Header)
 	ctx := r.Context()
 	ctx = otel.GetTextMapPropagator().Extract(ctx, carrier)
 
-	ctx, spanInicial := h.tracer.Start(ctx, "SPAN_INICIAL"+viper.GetString("REQUEST_NAME_OTEL"))
+	ctx, spanInicial := h.tracer.Start(ctx, "SPAN_INICIAL "+viper.GetString("REQUEST_NAME_OTEL"))
 	spanInicial.End()
 
-	_, span := h.tracer.Start(ctx, "Chamada externa"+viper.GetString("REQUEST_NAME_OTEL"))
-	defer span.End()
-
 	otel.GetTextMapPropagator().Inject(ctx, propagation.HeaderCarrier(r.Header))
-	
+
 	zipCode := r.URL.Query().Get("zipcode")
 	if len(zipCode) != 8 {
 		http.Error(w, "invalid zipcode", http.StatusPreconditionFailed)
 		return
 	}
 
-	city, err := getLocation(zipCode)
+	city, err := h.getLocation(ctx, zipCode)
 	if err != nil || city == "" {
 		http.Error(w, "can not find zipcode", http.StatusNotFound)
 		return
 	}
 
-	weather, err := getWeather(city)
+	weather, err := h.getWeather(ctx, city)
 	if err != nil {
 		http.Error(w, "failed to get weather info", http.StatusInternalServerError)
 		return
@@ -188,7 +185,11 @@ type WeatherInfo struct {
 	} `json:"current"`
 }
 
-func getLocation(zipCode string) (string, error) {
+func (h *handler) getLocation(ctx context.Context, zipCode string) (string, error) {
+
+	_, span := h.tracer.Start(ctx, "Chamada externa: getLocation")
+	defer span.End()
+
 	tr := &http.Transport{
 		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 	}
@@ -209,7 +210,11 @@ func getLocation(zipCode string) (string, error) {
 	return location.Localidade, nil
 }
 
-func getWeather(city string) (WeatherInfo, error) {
+func (h *handler) getWeather(ctx context.Context, city string) (WeatherInfo, error) {
+
+	_, span := h.tracer.Start(ctx, "Chamada externa: getWeather")
+	defer span.End()
+
 	tr := &http.Transport{
 		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 	}

@@ -11,6 +11,7 @@ import (
 	"regexp"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/spf13/viper"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel"
@@ -20,7 +21,6 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.21.0"
 	"go.opentelemetry.io/otel/trace"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 type ZipCodeRequest struct {
@@ -104,7 +104,7 @@ func main() {
 		}
 	}()
 
-	tracer := otel.Tracer("microservice-tracer")
+	tracer := otel.Tracer("service-a")
 
 	h := &handler{
 		tracer: tracer,
@@ -112,7 +112,7 @@ func main() {
 
 	http.Handle("/metrics", promhttp.Handler())
 	http.Handle("/zipcode", otelhttp.NewHandler(http.HandlerFunc(h.zipCodeHandler), "ZipCodeHandler"))
-	
+
 	log.Fatal(http.ListenAndServe(":8080", nil))
 
 	select {
@@ -133,11 +133,8 @@ func (h *handler) zipCodeHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	ctx = otel.GetTextMapPropagator().Extract(ctx, carrier)
 
-	ctx, spanInicial := h.tracer.Start(ctx, "SPAN_INICIAL"+viper.GetString("REQUEST_NAME_OTEL"))
+	ctx, spanInicial := h.tracer.Start(ctx, "SPAN_INICIAL "+viper.GetString("REQUEST_NAME_OTEL"))
 	spanInicial.End()
-
-	_, span := h.tracer.Start(ctx, "Chamada externa"+viper.GetString("REQUEST_NAME_OTEL"))
-	defer span.End()
 
 	otel.GetTextMapPropagator().Inject(ctx, propagation.HeaderCarrier(r.Header))
 
@@ -153,15 +150,17 @@ func (h *handler) zipCodeHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !isValidZipCode(req.CEP) {
-		http.Error(w, "invalid zipcode", 422)
+		http.Error(w, "invalid zipcode", http.StatusPreconditionFailed)
 		return
 	}
+
+	_, span := h.tracer.Start(ctx, "Chamada externa: getTemperatureByZipCode")
+	defer span.End()
 
 	client := http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
 
 	url := fmt.Sprintf("http://service-b:8081/zipcode?zipcode=%s", req.CEP)
-	//if you want to test locally with vscode debug, use the following line
- 	//url := fmt.Sprintf("http://localhost:8081/zipcode?zipcode=%s", req.CEP)
+
 	resp, err := client.Get(url)
 
 	if err != nil {
