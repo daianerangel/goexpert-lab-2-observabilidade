@@ -36,6 +36,7 @@ services:
       - "13133:13133" # health_check extension
       - "4317:4317"   # OTLP gRPC receiver
       - "55679:55679" # zpages extension
+      - "4318:4318"   # OTLP HTTP receiver
       
   service-a:
     container_name: service-a
@@ -43,7 +44,7 @@ services:
       context: ./service-a
     environment:
       - OTEL_SERVICE_NAME=service-a
-      - OTEL_EXPORTER_OTLP_ENDPOINT=otel-collector:4317
+      - OTEL_EXPORTER_OTLP_ENDPOINT=otel-collector:4318
       - REQUEST_NAME_OTEL=service-a-request
     depends_on:
       - jaeger-all-in-one
@@ -58,7 +59,7 @@ services:
       context: ./service-b
     environment:
       - OTEL_SERVICE_NAME=service-b
-      - OTEL_EXPORTER_OTLP_ENDPOINT=otel-collector:4317
+      - OTEL_EXPORTER_OTLP_ENDPOINT=otel-collector:4318
       - REQUEST_NAME_OTEL=service-b-request
     depends_on:
       - jaeger-all-in-one
