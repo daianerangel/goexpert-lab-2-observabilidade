@@ -41,6 +41,10 @@ services:
     container_name: service-a
     build: 
       context: ./service-a
+    environment:
+      - OTEL_SERVICE_NAME=service-a
+      - OTEL_EXPORTER_OTLP_ENDPOINT=otel-collector:4317
+      - REQUEST_NAME_OTEL=service-a-request
     depends_on:
       - jaeger-all-in-one
       - prometheus
@@ -52,6 +56,10 @@ services:
     container_name: service-b
     build: 
       context: ./service-b
+    environment:
+      - OTEL_SERVICE_NAME=service-b
+      - OTEL_EXPORTER_OTLP_ENDPOINT=otel-collector:4317
+      - REQUEST_NAME_OTEL=service-b-request
     depends_on:
       - jaeger-all-in-one
       - prometheus

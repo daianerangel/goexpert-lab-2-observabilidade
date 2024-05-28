@@ -6,14 +6,24 @@
             "type": "go",
             "request": "launch",
             "mode": "auto",
-            "program": "${workspaceFolder}/service-a/main.go" // Path to the main file of your first app
+            "program": "${workspaceFolder}/service-a/main.go", // Path to the main file of your first app
+            "env": {
+                "OTEL_SERVICE_NAME": "service-a",
+                "OTEL_EXPORTER_OTLP_ENDPOINT": "otel-collector:4317",
+                "REQUEST_NAME_OTEL": "service-a-request"
+            }
         },
         {
             "name": "Launch App 2",
             "type": "go",
             "request": "launch",
             "mode": "auto",
-            "program": "${workspaceFolder}/service-b/main.go" // Path to the main file of your second app
+            "program": "${workspaceFolder}/service-b/main.go", // Path to the main file of your second app,
+            "env": {
+                "OTEL_SERVICE_NAME": "service-b",
+                "OTEL_EXPORTER_OTLP_ENDPOINT": "otel-collector:4317",
+                "REQUEST_NAME_OTEL": "service-b-request"
+            }
         }
     ],
     "compounds": [

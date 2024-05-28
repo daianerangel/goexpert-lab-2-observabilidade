@@ -2,13 +2,27 @@
 package main
 
 import (
+	"context"
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 	"net/url"
+	"os"
+	"os/signal"
+	"time"
+
+	"github.com/spf13/viper"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
+	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/sdk/resource"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	semconv "go.opentelemetry.io/otel/semconv/v1.21.0"
+	"go.opentelemetry.io/otel/trace"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 type TemperatureResponse struct {
@@ -18,27 +32,127 @@ type TemperatureResponse struct {
 	TempK float64 `json:"temp_K"`
 }
 
-func main() {
-	http.Handle("/zipcode", otelhttp.NewHandler(http.HandlerFunc(temperatureHandler), "TemperatureHandler"))
-	log.Fatal(http.ListenAndServe(":8081", nil))
+func initProvider(serviceName, collectorURL string) (func(context.Context) error, error) {
+	ctx := context.Background()
+
+	//create a resource
+	res, err := resource.New(ctx,
+		resource.WithAttributes(
+			semconv.ServiceName(serviceName),
+		),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create resource: %w", err)
+	}
+
+	//create a trace exporter
+	texp, err := otlptracehttp.New(ctx,
+		otlptracehttp.WithEndpoint(collectorURL),
+		otlptracehttp.WithInsecure(),
+	)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to create http connection to collector: %w", err)
+	}
+
+	//create a span processor
+	bsp := sdktrace.NewBatchSpanProcessor(texp)
+
+	//create a trace provider
+	tp := sdktrace.NewTracerProvider(
+		sdktrace.WithBatcher(texp),
+		sdktrace.WithResource(res),
+		sdktrace.WithSpanProcessor(bsp),
+	)
+
+	//set tracde provider
+	otel.SetTracerProvider(tp)
+
+	//set a map propagator
+	otel.SetTextMapPropagator(propagation.TraceContext{})
+
+	return tp.Shutdown, nil
+
 }
 
-func temperatureHandler(w http.ResponseWriter, r *http.Request) {
+// load env vars cfg
+func init() {
+	viper.AutomaticEnv()
+}
+
+type handler struct {
+	tracer trace.Tracer
+}
+
+func main() {
+
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, os.Interrupt)
+
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer cancel()
+
+	shutdown, err := initProvider(viper.GetString("OTEL_SERVICE_NAME"), viper.GetString("OTEL_EXPORTER_OTLP_ENDPOINT"))
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer func() {
+		if err := shutdown(ctx); err != nil {
+			log.Fatal("failed to shutdown TracerProvider: %w", err)
+		}
+	}()
+
+	tracer := otel.Tracer("microservice-tracer")
+
+	h:= &handler{
+		tracer: tracer,
+	}
+
+	http.Handle("/metrics", promhttp.Handler())
+	http.Handle("/zipcode", otelhttp.NewHandler(http.HandlerFunc(h.temperatureHandler), "TemperatureHandler"))
+	log.Fatal(http.ListenAndServe(":8081", nil))
+
+	select {
+	case <-sigCh:
+		log.Println("Shutting down gracefully, CTRL+C pressed...")
+	case <-ctx.Done():
+		log.Println("Shutting down due to other reason...")
+	}
+
+	// Create a timeout context for the graceful shutdown
+	_, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer shutdownCancel()
+}
+
+func (h *handler) temperatureHandler(w http.ResponseWriter, r *http.Request) {
+	
+	carrier := propagation.HeaderCarrier(r.Header)
+	ctx := r.Context()
+	ctx = otel.GetTextMapPropagator().Extract(ctx, carrier)
+
+	ctx, spanInicial := h.tracer.Start(ctx, "SPAN_INICIAL"+viper.GetString("REQUEST_NAME_OTEL"))
+	spanInicial.End()
+
+	_, span := h.tracer.Start(ctx, "Chamada externa"+viper.GetString("REQUEST_NAME_OTEL"))
+	defer span.End()
+
+	otel.GetTextMapPropagator().Inject(ctx, propagation.HeaderCarrier(r.Header))
+	
 	zipCode := r.URL.Query().Get("zipcode")
 	if len(zipCode) != 8 {
-		http.Error(w, "invalid zipcode", 422)
+		http.Error(w, "invalid zipcode", http.StatusPreconditionFailed)
 		return
 	}
 
 	city, err := getLocation(zipCode)
 	if err != nil || city == "" {
-		http.Error(w, "can not find zipcode", 404)
+		http.Error(w, "can not find zipcode", http.StatusNotFound)
 		return
 	}
 
 	weather, err := getWeather(city)
 	if err != nil {
-		http.Error(w, "failed to get weather info", 500)
+		http.Error(w, "failed to get weather info", http.StatusInternalServerError)
 		return
 	}
 
@@ -47,7 +161,7 @@ func temperatureHandler(w http.ResponseWriter, r *http.Request) {
 	tempK := tempC + 273
 
 	response2 := LocationInfoAndCity{
-		City: city,
+		City:  city,
 		TempC: tempC,
 		TempF: tempF,
 		TempK: tempK,
@@ -58,7 +172,7 @@ func temperatureHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 type LocationInfoAndCity struct {
-	City string `json:"city"`
+	City  string  `json:"city"`
 	TempC float64 `json:"temp_C"`
 	TempF float64 `json:"temp_F"`
 	TempK float64 `json:"temp_K"`
@@ -81,8 +195,7 @@ func getLocation(zipCode string) (string, error) {
 	client := &http.Client{Transport: tr}
 	url := fmt.Sprintf("https://viacep.com.br/ws/%s/json/", zipCode)
 	resp, err := client.Get(url)
-	fmt.Println("StatusCode:", resp)
-	fmt.Println("err:", err)
+
 	if err != nil {
 		return "", err
 	}
@@ -104,8 +217,7 @@ func getWeather(city string) (WeatherInfo, error) {
 	encodedCity := url.QueryEscape(city)
 	completeUrl := fmt.Sprintf("https://api.weatherapi.com/v1/current.json?key=6c0e6aefacc44ed0a69130616242705&q=%s", encodedCity)
 	resp, err := client.Get(completeUrl)
-	fmt.Println("StatusCode:", resp)
-	fmt.Println("err:", err)
+
 	if err != nil {
 		return WeatherInfo{}, err
 	}
