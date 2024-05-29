@@ -48,6 +48,7 @@ services:
       - REQUEST_NAME_OTEL=service-a-request
     depends_on:
       - jaeger-all-in-one
+      - zipkin-all-in-one
       - prometheus
       - otel-collector
     ports:
@@ -63,8 +64,10 @@ services:
       - REQUEST_NAME_OTEL=service-b-request
     depends_on:
       - jaeger-all-in-one
+      - zipkin-all-in-one
       - prometheus
       - otel-collector
+
     ports:
       - "8081:8081"
     
