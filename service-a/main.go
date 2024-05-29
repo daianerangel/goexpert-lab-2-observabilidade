@@ -159,7 +159,7 @@ func (h *handler) zipCodeHandler(w http.ResponseWriter, r *http.Request) {
 
 	client := http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
 
-	url := fmt.Sprintf("http://service-b:8081/zipcode?zipcode=%s", req.CEP)
+	url := fmt.Sprintf("http://localhost:8081/zipcode?zipcode=%s", req.CEP)
 
 	resp, err := client.Get(url)
 
@@ -168,6 +168,11 @@ func (h *handler) zipCodeHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		http.Error(w, "can not find zipcode", http.StatusNotFound)
+		return
+	}
 
 	var zipCodeResponse ZipCodeResponse
 	if err := json.NewDecoder(resp.Body).Decode(&zipCodeResponse); err != nil {
