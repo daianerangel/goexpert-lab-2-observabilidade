@@ -38,36 +38,36 @@ services:
       - "55679:55679" # zpages extension
       - "4318:4318"   # OTLP HTTP receiver
       
-  # service-a:
-  #   container_name: service-a
-  #   build: 
-  #     context: ./service-a
-  #   environment:
-  #     - OTEL_SERVICE_NAME=service-a
-  #     - OTEL_EXPORTER_OTLP_ENDPOINT=otel-collector:4318
-  #     - REQUEST_NAME_OTEL=service-a-request
-  #   depends_on:
-  #     - jaeger-all-in-one
-  #     - zipkin-all-in-one
-  #     - prometheus
-  #     - otel-collector
-  #   ports:
-  #     - "8080:8080"
+  service-a:
+    container_name: service-a
+    build: 
+      context: ./service-a
+    environment:
+      - OTEL_SERVICE_NAME=service-a
+      - OTEL_EXPORTER_OTLP_ENDPOINT=otel-collector:4318
+      - REQUEST_NAME_OTEL=service-a-request
+    depends_on:
+      - jaeger-all-in-one
+      - zipkin-all-in-one
+      - prometheus
+      - otel-collector
+    ports:
+      - "8080:8080"
 
-  # service-b:
-  #   container_name: service-b
-  #   build: 
-  #     context: ./service-b
-  #   environment:
-  #     - OTEL_SERVICE_NAME=service-b
-  #     - OTEL_EXPORTER_OTLP_ENDPOINT=otel-collector:4318
-  #     - REQUEST_NAME_OTEL=service-b-request
-  #   depends_on:
-  #     - jaeger-all-in-one
-  #     - zipkin-all-in-one
-  #     - prometheus
-  #     - otel-collector
+  service-b:
+    container_name: service-b
+    build: 
+      context: ./service-b
+    environment:
+      - OTEL_SERVICE_NAME=service-b
+      - OTEL_EXPORTER_OTLP_ENDPOINT=otel-collector:4318
+      - REQUEST_NAME_OTEL=service-b-request
+    depends_on:
+      - jaeger-all-in-one
+      - zipkin-all-in-one
+      - prometheus
+      - otel-collector
 
-  #   ports:
-  #     - "8081:8081"
+    ports:
+      - "8081:8081"
     
